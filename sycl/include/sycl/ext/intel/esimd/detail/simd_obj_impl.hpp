@@ -913,9 +913,6 @@ private:
   raw_vector_type M_data;
 
 protected:
-  // The test proxy if enabled
-  __ESIMD_DECLARE_TEST_PROXY
-
   void set(const raw_vector_type &Val) {
 #ifndef __SYCL_DEVICE_ONLY__
     M_data = Val;
