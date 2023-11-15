@@ -412,6 +412,33 @@ test_atomic_update(AccType &acc, float *ptrf, int byte_offset32,
     auto res_atomic_100 = atomic_update<atomic_op::cmpxchg, int, VL>(
         ptr, offsets, swap, compare, pred);
   }
+
+  // Test slm_atomic_update without operands.
+  {
+    // CHECK: call <4 x i32> @llvm.genx.dword.atomic.inc.v4i32.v4i1(<4 x i1> {{[^)]+}}, i32 {{[^)]+}}, <4 x i32> {{[^)]+}}, <4 x i32> undef)
+    auto res_slm_atomic_0 =
+        slm_atomic_update<atomic_op::inc, int>(offsets, pred);
+
+    // CHECK: call <4 x i32> @llvm.genx.dword.atomic.inc.v4i32.v4i1(<4 x i1> {{[^)]+}}, i32 {{[^)]+}}, <4 x i32> {{[^)]+}}, <4 x i32> undef)
+    auto res_slm_atomic_1 =
+       slm_atomic_update<atomic_op::inc, int>(offsets);
+
+    // CHECK: call <4 x i32> @llvm.genx.dword.atomic.inc.v4i32.v4i1(<4 x i1> {{[^)]+}}, i32 {{[^)]+}}, <4 x i32> {{[^)]+}}, <4 x i32> undef)
+    auto res_slm_atomic_2 =
+        slm_atomic_update<atomic_op::inc, int>(offsets_view, pred);
+
+    // CHECK: call <4 x i32> @llvm.genx.dword.atomic.inc.v4i32.v4i1(<4 x i1> {{[^)]+}}, i32 {{[^)]+}}, <4 x i32> {{[^)]+}}, <4 x i32> undef)
+    // auto res_slm_atomic_3 =
+    //    slm_atomic_update<atomic_op::inc, int>(offsets_view);
+
+    // CHECKx: call <4 x i32> @llvm.genx.lsc.xatomic.slm.v4i32.v4i1.v4i32(<4 x i1> {{[^)]+}}, i8 8, i8 0, i8 0, i16 1, i32 0, i8 3, i8 1, i8 1, i8 0, <4 x i32> {{[^)]+}}, <4 x i32> undef, <4 x i32> undef, i32 0, <4 x i32> undef)
+    // auto res_slm_atomic_2 =
+    //     slm_atomic_update<atomic_op::inc, int>(offsets, pred, props_a);
+
+    // CHECKx: call <4 x i32> @llvm.genx.lsc.xatomic.slm.v4i32.v4i1.v4i32(<4 x i1> {{[^)]+}}, i8 8, i8 0, i8 0, i16 1, i32 0, i8 3, i8 1, i8 1, i8 0, <4 x i32> {{[^)]+}}, <4 x i32> undef, <4 x i32> undef, i32 0, <4 x i32> undef)
+    // auto res_slm_atomic_3 =
+    //     slm_atomic_update<atomic_op::inc, int>(offsets, props_a);
+  }
 }
 
 // CHECK-LABEL: define {{.*}} @_Z16test_block_store{{.*}}
