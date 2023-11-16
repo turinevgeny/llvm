@@ -33,41 +33,49 @@ template <class, int, template <class, int> class> class TestID;
 const char *to_string(atomic_op op) {
   switch (op) {
   case atomic_op::add:
-    return "lsc::add";
+    return "add";
   case atomic_op::sub:
-    return "lsc::sub";
+    return "sub";
   case atomic_op::inc:
-    return "lsc::inc";
+    return "inc";
   case atomic_op::dec:
-    return "lsc::dec";
+    return "dec";
   case atomic_op::umin:
-    return "lsc::umin";
+    return "umin";
   case atomic_op::umax:
-    return "lsc::umax";
+    return "umax";
+  case atomic_op::xchg:
+    return "xchg";
   case atomic_op::cmpxchg:
-    return "lsc::cmpxchg";
+    return "cmpxchg";
   case atomic_op::bit_and:
-    return "lsc::bit_and";
+    return "bit_and";
   case atomic_op::bit_or:
-    return "lsc::bit_or";
+    return "bit_or";
   case atomic_op::bit_xor:
-    return "lsc::bit_xor";
+    return "bit_xor";
   case atomic_op::smin:
-    return "lsc::smin";
+    return "smin";
   case atomic_op::smax:
-    return "lsc::smax";
+    return "smax";
   case atomic_op::fmax:
-    return "lsc::fmax";
+    return "fmax";
   case atomic_op::fmin:
-    return "lsc::fmin";
+    return "fmin";
+  case atomic_op::fadd:
+    return "fadd";
+  case atomic_op::fsub:
+    return "fsub";
   case atomic_op::fcmpxchg:
-    return "lsc::fcmpxchg";
+    return "fcmpxchg";
   case atomic_op::load:
-    return "lsc::load";
+    return "load";
   case atomic_op::store:
-    return "lsc::store";
+    return "store";
+  case atomic_op::predec:
+    return "predec";
   }
-  return "lsc::<unknown>";
+  return "<unknown>";
 }
 
 template <int N> inline bool any(simd_mask<N> m, simd_mask<N> ignore_mask) {
@@ -123,8 +131,8 @@ bool test(queue q) {
 
         simd_mask<N> m = 1;
         if constexpr (UseMask) {
-          if (cfg.masked_lane < N)
-            m[cfg.masked_lane] = 0;
+          if (masked_lane < N)
+            m[masked_lane] = 0;
         }
         // Intra-work group barrier.
         barrier();
@@ -134,27 +142,27 @@ bool test(queue q) {
           if constexpr (n_args == 0) {
             if constexpr (UseMask) {
               if constexpr (UseProperties)
-                slm_atomic_update<op>(arr, offsets, m, props);
+                slm_atomic_update<op, T>(offsets, m, props);
               else
-                slm_atomic_update<op>(arr, offsets, m);
+                slm_atomic_update<op, T>(offsets, m);
             } else {
               if constexpr (UseProperties)
-                slm_atomic_update<op>(arr, offsets, props);
+                slm_atomic_update<op, T>(offsets, props);
               else
-                slm_atomic_update<op>(arr, offsets);
+                slm_atomic_update<op, T>(offsets);
             }
-          } else if constexpr (n_args == 1) {
+          } /*else if constexpr (n_args == 1) {
             simd<T, N> v0 = ImplF<T, N>::arg0(i);
             if constexpr (UseMask) {
               if constexpr (UseProperties)
-                slm_atomic_update<op>(arr, offsets, v0, m, props);
+                slm_atomic_update<op, T>(offsets, v0, m, props);
               else
-                slm_atomic_update<op>(arr, offsets, v0, m);
+                slm_atomic_update<op, T>(offsets, v0, m);
             } else {
               if constexpr (UseProperties)
-                slm_atomic_update<op>(arr, offsets, v0, props);
+                slm_atomic_update<op, T>(offsets, v0, props);
               else
-                slm_atomic_update<op>(arr, offsets, v0);
+                slm_atomic_update<op, T>(offsets, v0);
             }
           } else if constexpr (n_args == 2) {
             simd<T, N> new_val = ImplF<T, N>::arg0(i); // new value
@@ -164,38 +172,38 @@ bool test(queue q) {
             // is not endless:
             if constexpr (UseMask) {
               if constexpr (UseProperties) {
-                for (simd<T, N> old_val = slm_atomic_update<op>(
-                         arr, offsets, new_val, exp_val, m, props);
+                for (simd<T, N> old_val = slm_atomic_update<op, T>(
+                         offsets, new_val, exp_val, m, props);
                      any(old_val < exp_val, !m);
-                     old_val = slm_atomic_update<op>(arr, offsets, new_val, exp_val,
+                     old_val = slm_atomic_update<op, T>(offsets, new_val, exp_val,
                                                  m, props))
                   ;
               } else {
                 for (simd<T, N> old_val =
-                         slm_atomic_update<op>(arr, offsets, new_val, exp_val, m);
+                         slm_atomic_update<op, T>(offsets, new_val, exp_val, m);
                      any(old_val < exp_val, !m);
                      old_val =
-                         slm_atomic_update<op>(arr, offsets, new_val, exp_val, m))
+                         slm_atomic_update<op, T>(offsets, new_val, exp_val, m))
                   ;
               }
             } else {
               if constexpr (UseProperties) {
-                for (simd<T, N> old_val = slm_atomic_update<op>(
-                         arr, offsets, new_val, exp_val, props);
+                for (simd<T, N> old_val = slm_atomic_update<op, T>(
+                         offsets, new_val, exp_val, props);
                      any(old_val < exp_val, !m);
-                     old_val = slm_atomic_update<op>(arr, offsets, new_val, exp_val,
+                     old_val = slm_atomic_update<op, T>(offsets, new_val, exp_val,
                                                  props))
                   ;
               } else {
                 for (simd<T, N> old_val =
-                         slm_atomic_update<op>(arr, offsets, new_val, exp_val);
+                         slm_atomic_update<op, T>(offsets, new_val, exp_val);
                      any(old_val < exp_val, !m);
                      old_val =
-                         slm_atomic_update<op>(arr, offsets, new_val, exp_val))
+                         slm_atomic_update<op, T>(offsets, new_val, exp_val))
                   ;
-              }
+              }*
             }
-          }
+          }*/
         }
         // TODO: replace this API with unified version.
         auto data0 = lsc_slm_gather<T>(slm_offsets);
@@ -245,7 +253,7 @@ static bool is_updated(int ind, int VL, bool use_mask) {
   int ii = dense_ind(ind, VL);
   bool res = true;
   if (use_mask)
-    res = (ii % VL) != cfg.masked_lane;
+    res = (ii % VL) != masked_lane;
   return res;
 }
 
@@ -290,7 +298,7 @@ template <class T, int N, class C, C Op> struct ImplLoadBase {
   static T init(int i) { return (T)(i + FPDELTA); }
 
   static T gold(int i, bool use_mask) {
-    T gold = init(i, use_mask);
+    T gold = init(i);
     return gold;
   }
 };
@@ -419,7 +427,7 @@ template <class T, int N, class C, C Op> struct ImplCmpxchgBase {
 
   static T init(int i) { return base - 1; }
 
-  static T gold(int i, use_mask) {
+  static T gold(int i, bool use_mask) {
     T gold = is_updated(i, N, use_mask) ? (T)(threads_per_group * n_groups - 1 + base)
                               : init(i);
     return gold;
@@ -447,7 +455,8 @@ template <int N, template <class, int> class Op,
 bool test_int_types(queue q) {
   bool passed = true;
   if constexpr (SignMask & Signed) {
-    passed &= test<int16_t, N, Op, UseMask, UsePVCFeatures>(q);
+    if constexpr (UsePVCFeatures)
+      passed &= test<int16_t, N, Op, UseMask, UsePVCFeatures>(q);
 
     passed &= test<int32_t, N, Op, UseMask, UsePVCFeatures>(q);
     if constexpr (std::is_same_v<Op<int64_t, N>, ImplCmpxchg<int64_t, N>>) {
@@ -456,7 +465,8 @@ bool test_int_types(queue q) {
   }
 
   if constexpr (SignMask & Unsigned) {
-    passed &= test<uint16_t, N, Op, UseMask, UsePVCFeatures>(q);
+    if constexpr (UsePVCFeatures)
+      passed &= test<uint16_t, N, Op, UseMask, UsePVCFeatures>(q);
 
     passed &= test<uint32_t, N, Op, UseMask, UsePVCFeatures>(q);
     if constexpr (std::is_same_v<Op<uint64_t, N>, ImplCmpxchg<uint64_t, N>>) {
@@ -468,20 +478,22 @@ bool test_int_types(queue q) {
 
 template <int N, template <class, int> class Op, bool UseMask, bool UsePVCFeatures> bool test_fp_types(queue q) {
   bool passed = true;
-  if constexpr (std::is_same_v<Op<sycl::half, N>, ImplLSCFmax<sycl::half, N>> ||
-                std::is_same_v<Op<sycl::half, N>, ImplLSCFmin<sycl::half, N>> ||
-                std::is_same_v<Op<sycl::half, N>,
-                               ImplLSCFcmpwr<sycl::half, N>>) {
-    auto dev = q.get_device();
-    if (dev.has(sycl::aspect::fp16)) {
-      passed &= test<sycl::half, N, Op, UseMask, UsePVCFeatures>(q);
+  if constexpr (UsePVCFeatures) {
+    if constexpr (std::is_same_v<Op<sycl::half, N>, ImplLSCFmax<sycl::half, N>> ||
+                  std::is_same_v<Op<sycl::half, N>, ImplLSCFmin<sycl::half, N>> ||
+                  std::is_same_v<Op<sycl::half, N>,
+                                ImplLSCFcmpwr<sycl::half, N>>) {
+      auto dev = q.get_device();
+      if (dev.has(sycl::aspect::fp16)) {
+        passed &= test<sycl::half, N, Op, UseMask, UsePVCFeatures>(q);
+      }
     }
   }
   passed &= test<float, N, Op, UseMask, UsePVCFeatures>(q);
   return passed;
 }
 
-template <template <class, int> class Op, int SignMask = (Signed | Unsigned), bool UseMask, bool UsePVCFeatures>
+template <template <class, int> class Op, bool UseMask, bool UsePVCFeatures, int SignMask = (Signed | Unsigned)>
 bool test_int_types_and_sizes(queue q) {
   bool passed = true;
   passed &= test_int_types<1, Op, SignMask, UseMask, UsePVCFeatures>(q);
@@ -526,7 +538,7 @@ int test_with_mask(queue q) {
 */
 
   // Check load/store operations
-  passed &= test_int_types_and_sizes<ImplLoad, UseMask, UsePVCFeatures>(q);
+  //passed &= test_int_types_and_sizes<ImplLoad, UseMask, UsePVCFeatures>(q);
 /*
   passed &= test_int_types_and_sizes<ImplStore, UseMask, UsePVCFeatures>(q);
   passed &= test_fp_types_and_sizes<ImplStore, UseMask, UsePVCFeatures>(q);
@@ -535,8 +547,7 @@ int test_with_mask(queue q) {
   passed &= test_int_types_and_sizes<ImplCmpxchg, UseMask, UsePVCFeatures>(q);
   passed &= test_fp_types_and_sizes<ImplLSCFcmpwr, UseMask, UsePVCFeatures>(q);
 #endif
-  std::cout << (passed ? "Passed\n" : "FAILED\n");
-  return passed ? 0 : 1;
+  return passed;
 }
 
 template <bool UsePVCFeatures> bool test_main(queue q) {

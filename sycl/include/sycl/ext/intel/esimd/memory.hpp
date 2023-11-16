@@ -3465,11 +3465,11 @@ slm_atomic_update_impl(simd<uint32_t, N> offsets,
 ///                   props = {});                              /// (slm-au0-2)
 ///
 /// simd<T, N>
-/// slm_atomic_update(simd_view<uint32_t, RegionTy> byte_offset,
+/// slm_atomic_update(simd_view<simd<uint32_t, N>, RegionTy> byte_offset,
 ///                   simd_mask<N> mask, props = {});           /// (slm-au0-3)
 ///
 /// simd<T, N>
-/// slm_atomic_update(simd_view<uint32_t, RegionTy> byte_offset,
+/// slm_atomic_update(simd_view<simd<uint32_t, N>, RegionTy> byte_offset,
 ///                   props = {});                              /// (slm-au0-4)
 
 /// Usage of cache hints or non-standard operation width N requires DG2 or PVC.
@@ -3560,7 +3560,7 @@ slm_atomic_update(simd<uint32_t, N> byte_offset,
 }
 
 /// simd<T, N>
-/// slm_atomic_update(simd_view<uint32_t, RegionTy> byte_offset,
+/// slm_atomic_update(simd_view<simd<uint32_t, N>, RegionTy> byte_offset,
 ///                   simd_mask<N> mask, props = {});           /// (slm-au0-3)
 ///
 /// A variation of \c atomic_update API with \c byte_offset represented as
@@ -3591,14 +3591,14 @@ __ESIMD_API std::enable_if_t<
     __ESIMD_DNS::get_num_args<Op>() == 0 &&
         ext::oneapi::experimental::is_property_list_v<PropertyListT>,
     simd<T, N>>
-slm_atomic_update(simd_view<uint32_t, RegionTy> byte_offset,
+slm_atomic_update(simd_view<simd<uint32_t, N>, RegionTy> byte_offset,
                   simd_mask<N> mask,
                   PropertyListT props = {}) {
   return slm_atomic_update<Op, T, N>(byte_offset.read(), mask, props);
 }
 
 /// simd<T, N>
-/// slm_atomic_update(simd_view<uint32_t, RegionTy> byte_offset,
+/// slm_atomic_update(simd_view<simd<uint32_t, N>, RegionTy> byte_offset,
 ///                   props = {});                              /// (slm-au0-4)
 ///
 /// A variation of \c atomic_update API with \c byte_offset represented as
@@ -3627,7 +3627,7 @@ __ESIMD_API std::enable_if_t<
     __ESIMD_DNS::get_num_args<Op>() == 0 &&
         ext::oneapi::experimental::is_property_list_v<PropertyListT>,
     simd<T, N>>
-slm_atomic_update(simd_view<uint32_t, RegionTy> byte_offset,
+slm_atomic_update(simd_view<simd<uint32_t, N>, RegionTy> byte_offset,
                   PropertyListT props = {}) {
   simd_mask<N> mask = 1;
   return slm_atomic_update<Op, T, N>(byte_offset.read(), mask, props);
