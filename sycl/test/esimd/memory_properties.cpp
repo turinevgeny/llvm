@@ -325,7 +325,7 @@ test_atomic_update(AccType &acc, float *ptrf, int byte_offset32,
         atomic_update<atomic_op::add, int>(ptr, offsets, add, pred);
   }
 
-  // Test atomic update with one operand.
+  // Test atomic update with two operands.
   {
     // CHECK: call <4 x i32> @llvm.genx.lsc.xatomic.stateless.v4i32.v4i1.v4i64(<4 x i1> {{[^)]+}}, i8 18, i8 1, i8 3, i16 1, i32 0, i8 3, i8 1, i8 1, i8 0, <4 x i64> {{[^)]+}}, <4 x i32> {{[^)]+}}, <4 x i32> {{[^)]+}}, i32 0, <4 x i32> undef)
     auto res_atomic_1 = atomic_update<atomic_op::cmpxchg, int>(
@@ -413,7 +413,6 @@ test_atomic_update(AccType &acc, float *ptrf, int byte_offset32,
         ptr, offsets, swap, compare, pred);
   }
 
-
   // Test slm_atomic_update without operands.
   {
     // CHECK: call <4 x i32> @llvm.genx.dword.atomic.inc.v4i32.v4i1(<4 x i1> {{[^)]+}}, i32 {{[^)]+}}, <4 x i32> {{[^)]+}}, <4 x i32> undef)
@@ -449,7 +448,50 @@ test_atomic_update(AccType &acc, float *ptrf, int byte_offset32,
         slm_atomic_update<atomic_op::inc, int>(offsets, props_a);
   }
 
-  // Test slm_atomic_update without operands.
+  // Test slm_atomic_update with one operand.
+  {
+    // CHECK: call <4 x i32> @llvm.genx.lsc.xatomic.slm.v4i32.v4i1.v4i32(<4 x i1> {{[^)]+}}, i8 12, i8 1, i8 3, i16 1, i32 0, i8 3, i8 1, i8 1, i8 0, <4 x i32> {{[^)]+}}, <4 x i32> {{[^)]+}}, <4 x i32> undef, i32 0, <4 x i32> undef)
+    auto res_slm_atomic_1 =
+        slm_atomic_update<atomic_op::add, int>(offsets, add, pred, props_a);
+
+    // CHECK: call <4 x i32> @llvm.genx.lsc.xatomic.slm.v4i32.v4i1.v4i32(<4 x i1> {{[^)]+}}, i8 12, i8 1, i8 3, i16 1, i32 0, i8 3, i8 1, i8 1, i8 0, <4 x i32> {{[^)]+}}, <4 x i32> {{[^)]+}}, <4 x i32> undef, i32 0, <4 x i32> undef)
+    auto res_slm_atomic_2 =
+        slm_atomic_update<atomic_op::add, int>(offsets, add, props_a);
+
+    // CHECK: call <4 x i32> @llvm.genx.lsc.xatomic.slm.v4i32.v4i1.v4i32(<4 x i1> {{[^)]+}}, i8 12, i8 1, i8 3, i16 1, i32 0, i8 3, i8 1, i8 1, i8 0, <4 x i32> {{[^)]+}}, <4 x i32> {{[^)]+}}, <4 x i32> undef, i32 0, <4 x i32> undef)
+    auto res_slm_atomic_3 =
+        slm_atomic_update<atomic_op::add, int>(offsets, add_view, pred, props_a);
+
+    // CHECK: call <4 x i32> @llvm.genx.lsc.xatomic.slm.v4i32.v4i1.v4i32(<4 x i1> {{[^)]+}}, i8 12, i8 1, i8 3, i16 1, i32 0, i8 3, i8 1, i8 1, i8 0, <4 x i32> {{[^)]+}}, <4 x i32> {{[^)]+}}, <4 x i32> undef, i32 0, <4 x i32> undef)
+    auto res_slm_atomic_4 =
+        slm_atomic_update<atomic_op::add, int>(offsets, add_view, props_a);
+
+    // CHECK: call <4 x i32> @llvm.genx.lsc.xatomic.slm.v4i32.v4i1.v4i32(<4 x i1> {{[^)]+}}, i8 12, i8 1, i8 3, i16 1, i32 0, i8 3, i8 1, i8 1, i8 0, <4 x i32> {{[^)]+}}, <4 x i32> {{[^)]+}}, <4 x i32> undef, i32 0, <4 x i32> undef)
+    auto res_slm_atomic_5 =
+        slm_atomic_update<atomic_op::add, int>(offsets_view, add, pred, props_a);
+
+    // CHECK: call <4 x i32> @llvm.genx.lsc.xatomic.slm.v4i32.v4i1.v4i32(<4 x i1> {{[^)]+}}, i8 12, i8 1, i8 3, i16 1, i32 0, i8 3, i8 1, i8 1, i8 0, <4 x i32> {{[^)]+}}, <4 x i32> {{[^)]+}}, <4 x i32> undef, i32 0, <4 x i32> undef)
+    auto res_slm_atomic_6 =
+        slm_atomic_update<atomic_op::add, int>(offsets_view, add, props_a);
+
+    // CHECK: call <4 x i32> @llvm.genx.lsc.xatomic.slm.v4i32.v4i1.v4i32(<4 x i1> {{[^)]+}}, i8 12, i8 1, i8 3, i16 1, i32 0, i8 3, i8 1, i8 1, i8 0, <4 x i32> {{[^)]+}}, <4 x i32> {{[^)]+}}, <4 x i32> undef, i32 0, <4 x i32> undef)
+    auto res_slm_atomic_7 =
+        slm_atomic_update<atomic_op::add, int>(offsets_view, add_view, pred, props_a);
+
+    // CHECK: call <4 x i32> @llvm.genx.lsc.xatomic.slm.v4i32.v4i1.v4i32(<4 x i1> {{[^)]+}}, i8 12, i8 1, i8 3, i16 1, i32 0, i8 3, i8 1, i8 1, i8 0, <4 x i32> {{[^)]+}}, <4 x i32> {{[^)]+}}, <4 x i32> undef, i32 0, <4 x i32> undef)
+    auto res_slm_atomic_8 =
+        slm_atomic_update<atomic_op::add, int>(offsets_view, add_view, props_a);
+
+    // Do not pass properties.
+    // CHECK: call <4 x i32> @llvm.genx.dword.atomic.add.v4i32.v4i1.v4i32(<4 x i1> {{[^)]+}}, i32 {{[^)]+}}, <4 x i32>{{[^)]+}}, <4 x i32> {{[^)]+}}, <4 x i32> undef)
+    auto res_atomic_100 =
+        slm_atomic_update<atomic_op::add, int>(offsets, add, pred);
+    // CHECK: call <4 x i32> @llvm.genx.dword.atomic.add.v4i32.v4i1.v4i32(<4 x i1> {{[^)]+}}, i32 {{[^)]+}}, <4 x i32>{{[^)]+}}, <4 x i32> {{[^)]+}}, <4 x i32> undef)
+    auto res_atomic_101 =
+        slm_atomic_update<atomic_op::add, int>(offsets, add);
+  }
+
+  // Test slm_atomic_update with two operands.
   {
 
   }

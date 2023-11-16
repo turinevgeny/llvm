@@ -151,7 +151,7 @@ bool test(queue q) {
               else
                 slm_atomic_update<op, T>(offsets);
             }
-          } /*else if constexpr (n_args == 1) {
+          } else if constexpr (n_args == 1) {
             simd<T, N> v0 = ImplF<T, N>::arg0(i);
             if constexpr (UseMask) {
               if constexpr (UseProperties)
@@ -164,7 +164,7 @@ bool test(queue q) {
               else
                 slm_atomic_update<op, T>(offsets, v0);
             }
-          } else if constexpr (n_args == 2) {
+          } /*else if constexpr (n_args == 2) {
             simd<T, N> new_val = ImplF<T, N>::arg0(i); // new value
             simd<T, N> exp_val = ImplF<T, N>::arg1(i); // expected value
             // do compare-and-swap in a loop until we get expected value;
@@ -450,8 +450,8 @@ struct ImplLSCFcmpwr
 
 // ----------------- Main function and test combinations.
 
-template <int N, template <class, int> class Op,
-          int SignMask = (Signed | Unsigned), bool UseMask, bool UsePVCFeatures>
+template <int N, template <class, int> class Op, bool UseMask, bool UsePVCFeatures,
+          int SignMask = (Signed | Unsigned)>
 bool test_int_types(queue q) {
   bool passed = true;
   if constexpr (SignMask & Signed) {
@@ -496,11 +496,24 @@ template <int N, template <class, int> class Op, bool UseMask, bool UsePVCFeatur
 template <template <class, int> class Op, bool UseMask, bool UsePVCFeatures, int SignMask = (Signed | Unsigned)>
 bool test_int_types_and_sizes(queue q) {
   bool passed = true;
-  passed &= test_int_types<1, Op, SignMask, UseMask, UsePVCFeatures>(q);
-  passed &= test_int_types<2, Op, SignMask, UseMask, UsePVCFeatures>(q);
-  passed &= test_int_types<4, Op, SignMask, UseMask, UsePVCFeatures>(q);
-  passed &= test_int_types<8, Op, SignMask, UseMask, UsePVCFeatures>(q);
-  passed &= test_int_types<16, Op, SignMask, UseMask, UsePVCFeatures>(q);
+  passed &= test_int_types<1, Op, UseMask, UsePVCFeatures, SignMask>(q);
+  passed &= test_int_types<2, Op, UseMask, UsePVCFeatures, SignMask>(q);
+  passed &= test_int_types<4, Op, UseMask, UsePVCFeatures, SignMask>(q);
+  passed &= test_int_types<8, Op, UseMask, UsePVCFeatures, SignMask>(q);
+
+  // Supported by LSC atomic:
+  if constexpr (UsePVCFeatures) {
+    passed &= test_int_types<16, Op, UseMask, UsePVCFeatures, SignMask>(q);
+    passed &= test_int_types<32, Op, UseMask, UsePVCFeatures, SignMask>(q);
+    passed &= test_int_types<64, Op, UseMask, UsePVCFeatures, SignMask>(q);
+    // non power of two values are supported only in newer driver.
+    // TODO: Enable this when the new driver reaches test infrastructure
+    // (v27556).
+#if 0
+    passed &= test_int_types<12, Op, UseMask, UsePVCFeatures, SignMask>(q);
+    passed &= test_int_types<33, Op, UseMask, UsePVCFeatures, SignMask>(q);
+#endif
+  }
 
   return passed;
 }
@@ -523,29 +536,31 @@ int test_with_mask(queue q) {
   passed &= test_int_types_and_sizes<ImplInc, UseMask, UsePVCFeatures>(q);
   passed &= test_int_types_and_sizes<ImplDec, UseMask, UsePVCFeatures>(q);
 
-/*
   passed &= test_int_types_and_sizes<ImplIntAdd, UseMask, UsePVCFeatures>(q);
   passed &= test_int_types_and_sizes<ImplIntSub, UseMask, UsePVCFeatures>(q);
 
-  passed &= test_int_types_and_sizes<ImplSMax, Signed, UseMask, UsePVCFeatures>(q);
-  passed &= test_int_types_and_sizes<ImplSMin, Signed, UseMask, UsePVCFeatures>(q);
+  passed &= test_int_types_and_sizes<ImplSMax, UseMask, UsePVCFeatures, Signed>(q);
+  passed &= test_int_types_and_sizes<ImplSMin, UseMask, UsePVCFeatures, Signed>(q);
 
-  passed &= test_int_types_and_sizes<ImplUMax, Unsigned, UseMask, UsePVCFeatures>(q);
-  passed &= test_int_types_and_sizes<ImplUMin, Unsigned, UseMask, UsePVCFeatures>(q);
+  passed &= test_int_types_and_sizes<ImplUMax, UseMask, UsePVCFeatures, Unsigned>(q);
+  passed &= test_int_types_and_sizes<ImplUMin, UseMask, UsePVCFeatures, Unsigned>(q);
 
-  passed &= test_fp_types_and_sizes<ImplLSCFmax, UseMask, UsePVCFeatures>(q);
-  passed &= test_fp_types_and_sizes<ImplLSCFmin, UseMask, UsePVCFeatures>(q);
-*/
+  if constexpr (UsePVCFeatures) {
+    passed &= test_fp_types_and_sizes<ImplLSCFmax, UseMask, UsePVCFeatures>(q);
+    passed &= test_fp_types_and_sizes<ImplLSCFmin, UseMask, UsePVCFeatures>(q);
 
-  // Check load/store operations
-  //passed &= test_int_types_and_sizes<ImplLoad, UseMask, UsePVCFeatures>(q);
-/*
-  passed &= test_int_types_and_sizes<ImplStore, UseMask, UsePVCFeatures>(q);
-  passed &= test_fp_types_and_sizes<ImplStore, UseMask, UsePVCFeatures>(q);
-*/
+    // Check load/store operations
+    passed &= test_int_types_and_sizes<ImplLoad, UseMask, UsePVCFeatures>(q);
+
+    passed &= test_int_types_and_sizes<ImplStore, UseMask, UsePVCFeatures>(q);
+    passed &= test_fp_types_and_sizes<ImplStore, UseMask, UsePVCFeatures>(q);
+  }
+
 #else
   passed &= test_int_types_and_sizes<ImplCmpxchg, UseMask, UsePVCFeatures>(q);
-  passed &= test_fp_types_and_sizes<ImplLSCFcmpwr, UseMask, UsePVCFeatures>(q);
+  if constexpr (UsePVCFeatures) {
+    passed &= test_fp_types_and_sizes<ImplLSCFcmpwr, UseMask, UsePVCFeatures>(q);
+  }
 #endif
   return passed;
 }

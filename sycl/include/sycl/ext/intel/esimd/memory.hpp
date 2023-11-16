@@ -3419,7 +3419,7 @@ lsc_format_ret(__ESIMD_NS::simd<T1, N> Vals) {
 /// @tparam L1H is L1 cache hint.
 /// @tparam L2H is L2 cache hint.
 /// @param offsets is the zero-based offsets.
-/// @param pred is predicates.
+/// @param pred is predicate.
 ///
 /// @return A vector of the old values at the memory locations before the
 ///   update.
@@ -3437,17 +3437,65 @@ slm_atomic_update_impl(simd<uint32_t, N> offsets,
   constexpr uint16_t AddressScale = 1;
   constexpr int ImmOffset = 0;
   constexpr lsc_data_size EDS =
-      detail::expand_data_size(detail::finalize_data_size<T, DS>());
-  constexpr detail::lsc_vector_size VS = detail::to_lsc_vector_size<1>();
-  constexpr detail::lsc_data_order Transposed =
-      detail::lsc_data_order::nontranspose;
-  using MsgT = typename detail::lsc_expand_type<T>::type;
-  constexpr int IOp = detail::lsc_to_internal_atomic_op<T, Op>();
+      expand_data_size(finalize_data_size<T, DS>());
+  constexpr lsc_vector_size VS = to_lsc_vector_size<1>();
+  constexpr lsc_data_order Transposed =
+      lsc_data_order::nontranspose;
+  using MsgT = typename lsc_expand_type<T>::type;
+  constexpr int IOp = lsc_to_internal_atomic_op<T, Op>();
   simd<MsgT, N> Tmp =
       __esimd_lsc_xatomic_slm_0<MsgT, IOp, L1H, L2H,
                                 AddressScale, ImmOffset, EDS, VS,
                                 Transposed, N>(pred.data(), offsets.data());
-  return detail::lsc_format_ret<T>(Tmp);
+  return lsc_format_ret<T>(Tmp);
+}
+
+/// SLM atomic.
+/// Supported platforms: DG2, PVC
+/// VISA instruction: lsc_atomic_<OP>.slm
+///
+/// @tparam Op is operation type.
+/// @tparam T is element type.
+/// @tparam N is the number of channels (platform dependent).
+/// @tparam DS is the data size.
+/// @tparam L1H is L1 cache hint.
+/// @tparam L2H is L2 cache hint.
+/// @param offsets is the zero-based offsets.
+/// @param src0 is the first atomic operand.
+/// @param pred is predicate.
+///
+/// @return A vector of the old values at the memory locations before the
+///   update.
+template <atomic_op Op, typename T, int N,
+          lsc_data_size DS,
+          cache_hint L1H, cache_hint L2H>
+__ESIMD_API std::enable_if_t<get_num_args<Op>() == 1, simd<T, N>>
+slm_atomic_update_impl(simd<uint32_t, N> offsets,
+                       simd<T, N> src0,
+                       simd_mask<N> pred) {
+  static_assert(Op != atomic_op::fadd &&
+                    Op != atomic_op::fsub,
+                "fadd and fsub are not supported for slm.");
+  static_assert(sizeof(T) > 1, "Unsupported data type");
+  static_assert(sizeof(T) == 2 || sizeof(T) == 4, "Unsupported data type");
+  check_lsc_data_size<T, DS>();
+  check_atomic<Op, T, N, 1, /*IsLSC*/ true>();
+  constexpr uint16_t AddressScale = 1;
+  constexpr int ImmOffset = 0;
+  constexpr lsc_data_size EDS =
+      expand_data_size(finalize_data_size<T, DS>());
+  constexpr lsc_vector_size VS = to_lsc_vector_size<1>();
+  constexpr lsc_data_order Transposed =
+      lsc_data_order::nontranspose;
+  using MsgT = typename lsc_expand_type<T>::type;
+  constexpr int IOp = lsc_to_internal_atomic_op<T, Op>();
+  simd<MsgT, N> Msg_data = lsc_format_input<MsgT>(src0);
+  simd<MsgT, N> Tmp =
+      __esimd_lsc_xatomic_slm_1<MsgT, IOp, L1H, L2H,
+                                AddressScale, ImmOffset, EDS, VS,
+                                Transposed, N>(pred.data(), offsets.data(),
+                                                Msg_data.data());
+  return lsc_format_ret<T>(Tmp);
 }
 
 } // namespace detail
@@ -3531,6 +3579,7 @@ slm_atomic_update(simd<uint32_t, N> byte_offset,
 /// simd<T, N>
 /// slm_atomic_update(simd<uint32_t, N> byte_offset,
 ///                   props = {});                              /// (slm-au0-2)
+///
 /// Atomically updates \c N memory locations in SLM indicated by
 /// a vector of offsets, and returns a vector of old
 /// values found at the memory locations before update.
@@ -3633,19 +3682,335 @@ slm_atomic_update(simd_view<simd<uint32_t, N>, RegionTy> byte_offset,
   return slm_atomic_update<Op, T, N>(byte_offset.read(), mask, props);
 }
 
-/*===============================================================================================================================*/
+/// One argument variant of the atomic update operation.
 
-/// Atomic update operation performed on SLM. One source operands version.
-/// See description of template and function parameters in @ref
-/// usm_atomic_update1 "atomic update" operation docs.
-template <atomic_op Op, typename Tx, int N, class T = detail::__raw_t<Tx>>
-__ESIMD_API simd<Tx, N> slm_atomic_update(simd<uint32_t, N> offsets,
-                                          simd<Tx, N> src0, simd_mask<N> mask) {
-  detail::check_atomic<Op, T, N, 1>();
-  const auto si = __ESIMD_NS::get_surface_index(detail::LocalAccessorMarker());
-  return __esimd_dword_atomic1<Op, T, N>(mask.data(), si, offsets.data(),
-                                         src0.data());
+/// simd<T, N>
+/// slm_atomic_update(simd<uint32_t, N> byte_offset,
+///                   simd<T, N> src0,
+///                   simd_mask<N> mask, props = {});           /// (slm-au1-1)
+/// simd<T, N>
+/// slm_atomic_update(simd<uint32_t, N> byte_offset,
+///                   simd<T, N> src0,
+///                   props = {});                              /// (slm-au1-2)
+///
+/// simd<T, N>
+/// slm_atomic_update(simd<uint32_t, N> byte_offset,
+///                   simd_view<simd<T, N>, RegionTy> src0,
+///                   simd_mask<N> mask, props = {});           /// (slm-au1-3)
+/// simd<T, N>
+/// slm_atomic_update(simd<uint32_t, N> byte_offset,
+///                   simd_view<simd<T, N>, RegionTy> src0,
+///                   props = {});                              /// (slm-au1-4)
+///
+///
+/// simd<T, N>
+/// slm_atomic_update(simd_view<simd<uint32_t, N>, RegionTy> byte_offset
+///                   simd<T, N> src0,
+///                   simd_mask<N> mask, props = {});           /// (slm-au1-5)
+/// simd<T, N>
+/// slm_atomic_update(simd_view<simd<uint32_t, N>, RegionTy> byte_offset
+///                   simd<T, N> src0,
+///                   props = {});                              /// (slm-au1-6)
+///
+/// simd<T, N>
+/// slm_atomic_update(simd_view<simd<uint32_t, N>, OffsetRegionTy> byte_offset
+///                   simd_view<simd<T, N>, RegionTy> src0,
+///                   simd_mask<N> mask, props = {});           /// (slm-au1-7)
+/// simd<T, N>
+/// slm_atomic_update(simd_view<simd<uint32_t, N>, OffsetRegionTy> byte_offset
+///                   simd_view<simd<T, N>, RegionTy> src0,
+///                   props = {});                              /// (slm-au1-8)
+
+/// Usage of cache hints or non-standard operation width N requires DG2 or PVC.
+
+/// simd<T, N>
+/// slm_atomic_update(simd<uint32_t, N> byte_offset,
+///                   simd<T, N> src0,
+///                   simd_mask<N> mask, props = {});           /// (slm-au1-1)
+///
+/// Atomically updates \c N memory locations in SLM indicated by
+/// a vector of offsets, and returns a vector of old
+/// values found at the memory locations before update.
+/// @tparam Op The atomic operation.
+/// @tparam T The vector element type.
+/// @tparam N The number of memory locations to update.
+/// @param byte_offset The vector of 32-bit offsets.
+/// @param src0 is the first atomic operand.
+/// @param mask Operation mask, only locations with non-zero in the
+///   corresponding mask element are updated.
+/// @param props The parameter 'props' specifies the optional compile-time
+///   properties list. Only L1/L2 properties are used.
+//    Other properties are ignored.
+/// @return A vector of the old values at the memory locations before the
+///   update.
+template <atomic_op Op, typename T, int N, class Tx = detail::__raw_t<T>,
+          typename RegionTy = region1d_t<uint32_t, N, 1>,
+          typename PropertyListT =
+              ext::oneapi::experimental::detail::empty_properties_t>
+__ESIMD_API std::enable_if_t<
+    __ESIMD_DNS::get_num_args<Op>() == 1 &&
+        ext::oneapi::experimental::is_property_list_v<PropertyListT>,
+    simd<T, N>>
+slm_atomic_update(simd<uint32_t, N> byte_offset,
+                  simd<T, N> src0, simd_mask<N> mask,
+                  PropertyListT props = {}) {
+  constexpr auto L1Hint =
+      detail::getPropertyValue<PropertyListT, cache_hint_L1_key>(
+          cache_hint::none);
+
+  constexpr auto L2Hint =
+      detail::getPropertyValue<PropertyListT, cache_hint_L2_key>(
+          cache_hint::none);
+
+  static_assert(!PropertyListT::template has_property<cache_hint_L3_key>(),
+                "L3 cache hint is reserved. The old/experimental L3 LSC cache "
+                "hint is cache_level::L2 now.");
+
+  if constexpr (L1Hint != cache_hint::none || L2Hint != cache_hint::none ||
+                !__ESIMD_DNS::isPowerOf2(N, 32)) {
+    return slm_atomic_update_impl<Op, T, N, detail::lsc_data_size::default_size, L1Hint, L2Hint>(
+       byte_offset, src0, mask);
+  } else {
+    detail::check_atomic<Op, Tx, N, 1>();
+    const auto si = __ESIMD_NS::get_surface_index(detail::LocalAccessorMarker());
+    return __esimd_dword_atomic1<Op, Tx, N>(mask.data(), si, byte_offset.data(),
+                                          src0.data());
+  }
 }
+
+/// simd<T, N>
+/// slm_atomic_update(simd<uint32_t, N> byte_offset,
+///                   simd<T, N> src0,
+///                   props = {});                              /// (slm-au1-2)
+/// Atomically updates \c N memory locations in SLM indicated by
+/// a vector of offsets, and returns a vector of old
+/// values found at the memory locations before update.
+/// @tparam Op The atomic operation.
+/// @tparam T The vector element type.
+/// @tparam N The number of memory locations to update.
+/// @param byte_offset The vector of 32-bit offsets.
+/// @param src0 is the first atomic operand.
+/// @param props The parameter 'props' specifies the optional compile-time
+///   properties list. Only L1/L2 properties are used.
+//    Other properties are ignored.
+/// @return A vector of the old values at the memory locations before the
+///   update.
+template <atomic_op Op, typename T, int N, class Tx = detail::__raw_t<T>,
+          typename RegionTy = region1d_t<uint32_t, N, 1>,
+          typename PropertyListT =
+              ext::oneapi::experimental::detail::empty_properties_t>
+__ESIMD_API std::enable_if_t<
+    __ESIMD_DNS::get_num_args<Op>() == 1 &&
+        ext::oneapi::experimental::is_property_list_v<PropertyListT>,
+    simd<T, N>>
+slm_atomic_update(simd<uint32_t, N> byte_offset,
+                  simd<T, N> src0,
+                  PropertyListT props = {}) {
+  simd_mask<N> mask = 1;
+  return slm_atomic_update<Op, T, N>(byte_offset, src0, mask, props);
+}
+
+/// simd<T, N>
+/// slm_atomic_update(simd<uint32_t, N> byte_offset,
+///                   simd_view<simd<T, N>, RegionTy> src0,
+///                   simd_mask<N> mask, props = {});           /// (slm-au1-3)
+///
+/// Atomically updates \c N memory locations in SLM indicated by
+/// a vector of offsets, and returns a vector of old
+/// values found at the memory locations before update.
+/// @tparam Op The atomic operation.
+/// @tparam T The vector element type.
+/// @tparam N The number of memory locations to update.
+/// @param byte_offset The vector of 32-bit offsets.
+/// @param src0 is the first atomic operand.
+/// @param mask Operation mask, only locations with non-zero in the
+///   corresponding mask element are updated.
+/// @param props The parameter 'props' specifies the optional compile-time
+///   properties list. Only L1/L2 properties are used.
+//    Other properties are ignored.
+/// @return A vector of the old values at the memory locations before the
+///   update.
+template <atomic_op Op, typename T, int N, class Tx = detail::__raw_t<T>,
+          typename RegionTy = region1d_t<T, N, 1>,
+          typename PropertyListT =
+              ext::oneapi::experimental::detail::empty_properties_t>
+__ESIMD_API std::enable_if_t<
+    __ESIMD_DNS::get_num_args<Op>() == 1 &&
+        ext::oneapi::experimental::is_property_list_v<PropertyListT>,
+    simd<T, N>>
+slm_atomic_update(simd<uint32_t, N> byte_offset,
+                  simd_view<simd<T, N>, RegionTy> src0,
+                  simd_mask<N> mask,
+                  PropertyListT props = {}) {
+  return slm_atomic_update<Op, T, N>(byte_offset, src0.read(), mask, props);
+}
+
+/// simd<T, N>
+/// slm_atomic_update(simd<uint32_t, N> byte_offset,
+///                   simd_view<simd<T, N>, RegionTy> src0,
+///                   simd_mask<N> mask, props = {});           /// (slm-au1-4)
+///
+/// Atomically updates \c N memory locations in SLM indicated by
+/// a vector of offsets, and returns a vector of old
+/// values found at the memory locations before update.
+/// @tparam Op The atomic operation.
+/// @tparam T The vector element type.
+/// @tparam N The number of memory locations to update.
+/// @param byte_offset The vector of 32-bit offsets.
+/// @param src0 is the first atomic operand.
+/// @param props The parameter 'props' specifies the optional compile-time
+///   properties list. Only L1/L2 properties are used.
+//    Other properties are ignored.
+/// @return A vector of the old values at the memory locations before the
+///   update.
+template <atomic_op Op, typename T, int N, class Tx = detail::__raw_t<T>,
+          typename RegionTy = region1d_t<T, N, 1>,
+          typename PropertyListT =
+              ext::oneapi::experimental::detail::empty_properties_t>
+__ESIMD_API std::enable_if_t<
+    __ESIMD_DNS::get_num_args<Op>() == 1 &&
+        ext::oneapi::experimental::is_property_list_v<PropertyListT>,
+    simd<T, N>>
+slm_atomic_update(simd<uint32_t, N> byte_offset,
+                  simd_view<simd<T, N>, RegionTy> src0,
+                  PropertyListT props = {}) {
+  simd_mask<N> mask = 1;
+  return slm_atomic_update<Op, T, N>(byte_offset, src0.read(), mask, props);
+}
+
+/// simd<T, N>
+/// slm_atomic_update(simd_view<simd<uint32_t, N>, RegionTy> byte_offset
+///                   simd<T, N> src0,
+///                   simd_mask<N> mask, props = {});           /// (slm-au1-5)
+/// Atomically updates \c N memory locations in SLM indicated by
+/// a vector of offsets, and returns a vector of old
+/// values found at the memory locations before update.
+/// @tparam Op The atomic operation.
+/// @tparam T The vector element type.
+/// @tparam N The number of memory locations to update.
+/// @param byte_offset The vector of 32-bit offsets.
+/// @param src0 is the first atomic operand.
+/// @param mask Operation mask, only locations with non-zero in the
+///   corresponding mask element are updated.
+/// @param props The parameter 'props' specifies the optional compile-time
+///   properties list. Only L1/L2 properties are used.
+//    Other properties are ignored.
+/// @return A vector of the old values at the memory locations before the
+///   update.
+template <atomic_op Op, typename T, int N, class Tx = detail::__raw_t<T>,
+          typename OffsetRegionTy = region1d_t<uint32_t, N, 1>,
+          typename PropertyListT =
+              ext::oneapi::experimental::detail::empty_properties_t>
+__ESIMD_API std::enable_if_t<
+    __ESIMD_DNS::get_num_args<Op>() == 1 &&
+        ext::oneapi::experimental::is_property_list_v<PropertyListT>,
+    simd<T, N>>
+slm_atomic_update(simd_view<simd<uint32_t, N>, OffsetRegionTy> byte_offset,
+                  simd<T, N> src0, simd_mask<N> mask,
+                  PropertyListT props = {}) {
+  return slm_atomic_update<Op, T, N>(byte_offset.read(), src0, mask, props);
+}
+
+/// simd<T, N>
+/// slm_atomic_update(simd_view<simd<uint32_t, N>, RegionTy> byte_offset
+///                   simd<T, N> src0,
+///                   props = {});                              /// (slm-au1-6)
+/// Atomically updates \c N memory locations in SLM indicated by
+/// a vector of offsets, and returns a vector of old
+/// values found at the memory locations before update.
+/// @tparam Op The atomic operation.
+/// @tparam T The vector element type.
+/// @tparam N The number of memory locations to update.
+/// @param byte_offset The vector of 32-bit offsets.
+/// @param src0 is the first atomic operand.
+/// @param props The parameter 'props' specifies the optional compile-time
+///   properties list. Only L1/L2 properties are used.
+//    Other properties are ignored.
+/// @return A vector of the old values at the memory locations before the
+///   update.
+template <atomic_op Op, typename T, int N, class Tx = detail::__raw_t<T>,
+          typename OffsetRegionTy = region1d_t<uint32_t, N, 1>,
+          typename PropertyListT =
+              ext::oneapi::experimental::detail::empty_properties_t>
+__ESIMD_API std::enable_if_t<
+    __ESIMD_DNS::get_num_args<Op>() == 1 &&
+        ext::oneapi::experimental::is_property_list_v<PropertyListT>,
+    simd<T, N>>
+slm_atomic_update(simd_view<simd<uint32_t, N>, OffsetRegionTy> byte_offset,
+                  simd<T, N> src0,
+                  PropertyListT props = {}) {
+  simd_mask<N> mask = 1;
+  return slm_atomic_update<Op, T, N>(byte_offset.read(), src0, mask, props);
+}
+
+/// simd<T, N>
+/// slm_atomic_update(simd_view<simd<uint32_t, N>, OffsetRegionTy> byte_offset
+///                   simd_view<simd<T, N>, RegionTy> src0,
+///                   simd_mask<N> mask, props = {});           /// (slm-au1-7)
+/// Atomically updates \c N memory locations in SLM indicated by
+/// a vector of offsets, and returns a vector of old
+/// values found at the memory locations before update.
+/// @tparam Op The atomic operation.
+/// @tparam T The vector element type.
+/// @tparam N The number of memory locations to update.
+/// @param byte_offset The vector of 32-bit offsets.
+/// @param src0 is the first atomic operand.
+/// @param mask Operation mask, only locations with non-zero in the
+///   corresponding mask element are updated.
+/// @param props The parameter 'props' specifies the optional compile-time
+///   properties list. Only L1/L2 properties are used.
+//    Other properties are ignored.
+/// @return A vector of the old values at the memory locations before the
+///   update.
+template <atomic_op Op, typename T, int N, class Tx = detail::__raw_t<T>,
+          typename OffsetRegionTy = region1d_t<uint32_t, N, 1>,
+          typename RegionTy = region1d_t<T, N, 1>,
+          typename PropertyListT =
+              ext::oneapi::experimental::detail::empty_properties_t>
+__ESIMD_API std::enable_if_t<
+    __ESIMD_DNS::get_num_args<Op>() == 1 &&
+        ext::oneapi::experimental::is_property_list_v<PropertyListT>,
+    simd<T, N>>
+slm_atomic_update(simd_view<simd<uint32_t, N>, OffsetRegionTy> byte_offset,
+                  simd_view<simd<T, N>, RegionTy> src0, simd_mask<N> mask,
+                  PropertyListT props = {}) {
+  return slm_atomic_update<Op, T, N>(byte_offset.read(), src0.read(), mask, props);
+}
+
+/// simd<T, N>
+/// slm_atomic_update(simd_view<simd<uint32_t, N>, OffsetRegionTy> byte_offset
+///                   simd_view<simd<T, N>, RegionTy> src0,
+///                   props = {});                              /// (slm-au1-8)
+/// Atomically updates \c N memory locations in SLM indicated by
+/// a vector of offsets, and returns a vector of old
+/// values found at the memory locations before update.
+/// @tparam Op The atomic operation.
+/// @tparam T The vector element type.
+/// @tparam N The number of memory locations to update.
+/// @param byte_offset The vector of 32-bit offsets.
+/// @param src0 is the first atomic operand.
+/// @param props The parameter 'props' specifies the optional compile-time
+///   properties list. Only L1/L2 properties are used.
+//    Other properties are ignored.
+/// @return A vector of the old values at the memory locations before the
+///   update.
+template <atomic_op Op, typename T, int N, class Tx = detail::__raw_t<T>,
+          typename OffsetRegionTy = region1d_t<uint32_t, N, 1>,
+          typename RegionTy = region1d_t<T, N, 1>,
+          typename PropertyListT =
+              ext::oneapi::experimental::detail::empty_properties_t>
+__ESIMD_API std::enable_if_t<
+    __ESIMD_DNS::get_num_args<Op>() == 1 &&
+        ext::oneapi::experimental::is_property_list_v<PropertyListT>,
+    simd<T, N>>
+slm_atomic_update(simd_view<simd<uint32_t, N>, OffsetRegionTy> byte_offset,
+                  simd_view<simd<T, N>, RegionTy> src0,
+                  PropertyListT props = {}) {
+  simd_mask<N> mask = 1;
+  return slm_atomic_update<Op, T, N>(byte_offset.read(), src0.read(), mask, props);
+}
+
+/*===============================================================================================================================*/
 
 /// Atomic update operation performed on SLM. Two source operands version.
 /// See description of template and function parameters in @ref
